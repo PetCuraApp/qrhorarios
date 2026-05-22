@@ -99,6 +99,7 @@ async function escribirSalaStats(entry: SalaStatsEntry): Promise<void> {
       access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
+      allowOverwrite: true, // Enable overwriting an existing blob with the same pathname
     });
   } else {
     // Escritura atómica: escribir en temporal y renombrar (operación atómica del SO)
