@@ -23,12 +23,14 @@ export type HorarioSala = Record<string, BloqueData>;
 export interface SalaData {
   nombre: string;
   hash: string;
-  horario: HorarioSala;
+  horario: HorarioSala; // Fallback / Horario de la semana activa por defecto
+  horariosPorSemana: Record<string, HorarioSala>; // Horario por cada semana disponible
 }
 
 export interface HorariosData {
   salas: SalaData[];
-  semana: string;
+  semanaActivaDefault: string; // Semana predeterminada (ej: S10)
+  semanaInicioFecha?: string; // Fecha de inicio de clases (ej: "2026-03-09")
   generado: string;
   totalSalas: number;
   semanasDisponibles: string[];
@@ -152,82 +154,126 @@ export function parsearExcel(
     throw new Error(`Columnas no encontradas en el Excel: ${missing}`);
   }
 
-  // Determinar semana activa
-  const semanasDisponibles = getSemanas(rows);
-  const semana =
+  // Determinar semanas disponibles
+  let semanasDisponibles = getSemanas(rows);
+  if (semanasDisponibles.length === 0) {
+    semanasDisponibles = ['TODAS'];
+  }
+
+  // Determinar semana activa por defecto
+  const semanaActivaDefault =
     semanaElegida === 'auto' || semanaElegida === ''
-      ? detectarSemanaActiva(rows)
+      ? (semanasDisponibles.includes('TODAS') ? 'TODAS' : detectarSemanaActiva(rows))
       : semanaElegida;
 
-  // Filtrar filas activas
-  let rowsActivos = rows;
-  if (semana !== 'TODAS' && semanasDisponibles.includes(semana)) {
-    rowsActivos = rows.filter((r) => r[semana] === 1);
+  // Obtener todos los nombres únicos de sala
+  const nombresSalasUnicos = Array.from(
+    new Set(
+      rows
+        .map((r) => String(r[colSala] || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  // Inicializar mapa de salas a sus horarios de semanas
+  const salasResultMap = new Map<string, {
+    hash: string;
+    horariosPorSemana: Record<string, HorarioSala>;
+  }>();
+
+  for (const nombreSala of nombresSalasUnicos) {
+    salasResultMap.set(nombreSala, {
+      hash: hashSala(nombreSala),
+      horariosPorSemana: {},
+    });
   }
 
-  // Agrupar por sala
-  const salasMap = new Map<string, HorarioSala>();
+  // Helper para inicializar un horario vacío
+  const crearHorarioVacio = (): HorarioSala => {
+    const horario: HorarioSala = {};
+    for (let i = 0; i < BLOQUES_HORARIOS.length; i++) {
+      const [inicio, fin, label] = BLOQUES_HORARIOS[i];
+      const clave = `${inicio}_${fin}`;
+      horario[clave] = { label, orden: i, clases: {} };
+    }
+    return horario;
+  };
 
-  for (const row of rowsActivos) {
-    const nombreSala = String(row[colSala] || '').trim();
-    if (!nombreSala) continue;
+  // Procesar cada semana de forma independiente
+  for (const sem of semanasDisponibles) {
+    // Filtrar filas activas para esta semana
+    const rowsSemana = sem === 'TODAS'
+      ? rows
+      : rows.filter((r) => r[sem] === 1);
 
-    const dia = String(row[colDia] || '').trim();
-    if (!DIAS_ORDEN.includes(dia)) continue;
+    // Agrupar por sala para esta semana
+    const salasMapSemana = new Map<string, HorarioSala>();
 
-    const horaInicioRaw = row[colInicio];
-    const horaFinRaw = row[colFin];
-    const asignatura = String(row[colAsignatura] || '').trim();
-    const nombre = String(row[colNombre] || '').trim();
+    for (const row of rowsSemana) {
+      const nombreSala = String(row[colSala] || '').trim();
+      if (!nombreSala) continue;
 
-    const horaInicioHHMM = excelTimeToHHMM(horaInicioRaw);
-    const horaFinHHMM = excelTimeToHHMM(horaFinRaw);
-    const horaInicioHHMMSS = excelTimeToHHMMSS(horaInicioRaw);
-    const horaFinHHMMSS = excelTimeToHHMMSS(horaFinRaw);
+      const dia = String(row[colDia] || '').trim();
+      if (!DIAS_ORDEN.includes(dia)) continue;
 
-    // Inicializar sala si no existe
-    if (!salasMap.has(nombreSala)) {
-      const horario: HorarioSala = {};
-      for (let i = 0; i < BLOQUES_HORARIOS.length; i++) {
-        const [inicio, fin, label] = BLOQUES_HORARIOS[i];
-        const clave = `${inicio}_${fin}`;
-        horario[clave] = { label, orden: i, clases: {} };
+      const horaInicioRaw = row[colInicio];
+      const horaFinRaw = row[colFin];
+      const asignatura = String(row[colAsignatura] || '').trim();
+      const nombre = String(row[colNombre] || '').trim();
+
+      const horaInicioHHMM = excelTimeToHHMM(horaInicioRaw);
+      const horaFinHHMM = excelTimeToHHMM(horaFinRaw);
+      const horaInicioHHMMSS = excelTimeToHHMMSS(horaInicioRaw);
+      const horaFinHHMMSS = excelTimeToHHMMSS(horaFinRaw);
+
+      if (!salasMapSemana.has(nombreSala)) {
+        salasMapSemana.set(nombreSala, crearHorarioVacio());
       }
-      salasMap.set(nombreSala, horario);
+
+      const horario = salasMapSemana.get(nombreSala)!;
+      const bloquesOcupados = obtenerBloquesOcupados(horaInicioHHMMSS, horaFinHHMMSS);
+
+      for (const bloque of bloquesOcupados) {
+        const clave = `${bloque.inicio}_${bloque.fin}`;
+        if (!horario[clave]) continue;
+        if (horario[clave].clases[dia]) continue; // ya hay clase en ese bloque y día
+
+        horario[clave].clases[dia] = {
+          codigo: asignatura,
+          nombre,
+          horaInicio: horaInicioHHMM,
+          horaFin: horaFinHHMM,
+          multibloque: bloquesOcupados.length > 1,
+        };
+      }
     }
 
-    const horario = salasMap.get(nombreSala)!;
-    const bloquesOcupados = obtenerBloquesOcupados(horaInicioHHMMSS, horaFinHHMMSS);
+    // Guardar los horarios procesados para esta semana en cada sala
+    for (const nombreSala of nombresSalasUnicos) {
+      const salaData = salasResultMap.get(nombreSala)!;
+      salaData.horariosPorSemana[sem] = salasMapSemana.get(nombreSala) || crearHorarioVacio();
+    }
+  }
 
-    for (const bloque of bloquesOcupados) {
-      const clave = `${bloque.inicio}_${bloque.fin}`;
-      if (!horario[clave]) continue;
-      if (horario[clave].clases[dia]) continue; // ya hay una clase en ese bloque/día
-
-      horario[clave].clases[dia] = {
-        codigo: asignatura,
+  // Construir resultado final estructurado
+  const salas: SalaData[] = Array.from(salasResultMap.entries()).map(
+    ([nombre, data]) => {
+      const horario = data.horariosPorSemana[semanaActivaDefault] || crearHorarioVacio();
+      return {
         nombre,
-        horaInicio: horaInicioHHMM,
-        horaFin: horaFinHHMM,
-        multibloque: bloquesOcupados.length > 1,
+        hash: data.hash,
+        horario,
+        horariosPorSemana: data.horariosPorSemana,
       };
     }
-  }
-
-  // Construir resultado final
-  const salas: SalaData[] = Array.from(salasMap.entries()).map(
-    ([nombre, horario]) => ({
-      nombre,
-      hash: hashSala(nombre),
-      horario,
-    })
   );
 
   return {
     salas,
-    semana,
+    semanaActivaDefault,
     generado: new Date().toISOString(),
     totalSalas: salas.length,
     semanasDisponibles,
   };
 }
+

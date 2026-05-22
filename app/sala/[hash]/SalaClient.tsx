@@ -50,19 +50,12 @@ export default function SalaClient({ sala, semana, generado }: Props) {
     return () => clearInterval(interval);
   }, []);
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      await navigator.share({
-        title: `Horario — ${sala.nombre}`,
-        url: window.location.href,
-      });
-    } else {
-      await navigator.clipboard.writeText(window.location.href);
-      alert('URL copiada al portapapeles');
-    }
-  };
+  // Tracking silencioso: registrar escaneo sin bloquear la UI del alumno
+  useEffect(() => {
+    fetch(`/api/sala/${sala.hash}/track`, { method: 'POST' }).catch(() => {});
+  }, [sala.hash]);
 
-  const handlePrint = () => window.print();
+
 
   const bloques = BLOQUES_HORARIOS.map(([inicio, fin, label], i) => {
     const clave = `${inicio}_${fin}`;
@@ -91,14 +84,6 @@ export default function SalaClient({ sala, semana, generado }: Props) {
           flexWrap: 'wrap', gap: 16
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <a href="/" style={{
-                color: 'var(--text-muted)', fontSize: '0.82rem', textDecoration: 'none',
-                display: 'flex', alignItems: 'center', gap: 6
-              }}>
-                ← Todas las salas
-              </a>
-            </div>
             <h1 style={{ fontSize: '2rem', fontWeight: 800, lineHeight: 1.2 }}>
               <span className="gradient-text">📍 {sala.nombre}</span>
             </h1>
@@ -117,16 +102,8 @@ export default function SalaClient({ sala, semana, generado }: Props) {
               )}
             </div>
           </div>
-
-          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-            <button onClick={handleShare} className="btn btn-ghost" style={{ padding: '10px 16px', fontSize: '0.82rem' }}>
-              🔗 Compartir
-            </button>
-            <button onClick={handlePrint} className="btn btn-ghost" style={{ padding: '10px 16px', fontSize: '0.82rem' }}>
-              🖨️ Imprimir
-            </button>
-          </div>
         </header>
+
 
         {/* Leyenda móvil */}
         {bloqueActual >= 0 && (

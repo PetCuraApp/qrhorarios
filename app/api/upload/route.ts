@@ -30,14 +30,15 @@ export async function POST(request: NextRequest) {
     await guardarHorarios(data);
 
     // Guardar Excel original como respaldo (si hay Blob configurado)
-    const excelUrl = await guardarExcel(buffer, `horarios-${data.semana}-${Date.now()}.xlsx`);
+    const excelUrl = await guardarExcel(buffer, `horarios-${data.semanaActivaDefault}-${Date.now()}.xlsx`);
 
-    // Limpiar cache de la página principal
+    // Limpiar cache de la página principal y las salas
     revalidatePath('/');
+    revalidatePath('/sala/[hash]');
 
     return NextResponse.json({
       ok: true,
-      semana: data.semana,
+      semana: data.semanaActivaDefault,
       totalSalas: data.totalSalas,
       semanasDisponibles: data.semanasDisponibles,
       generado: data.generado,
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
 /** GET /api/upload — retorna semanas disponibles sin procesar (preview) */
 export async function PUT(request: NextRequest) {

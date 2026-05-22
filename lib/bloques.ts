@@ -62,3 +62,42 @@ export function getBloqueActual(): number {
     ([inicio, fin]) => hhmm >= inicio && hhmm < fin
   );
 }
+
+/**
+ * Calcula la semana académica actual en base a la fecha de inicio del semestre.
+ * Si no está configurada o hay algún error, retorna la semana por defecto.
+ */
+export function calcularSemanaActual(
+  semanaInicioFecha: string | undefined,
+  semanasDisponibles: string[],
+  semanaDefault: string
+): string {
+  if (!semanaInicioFecha) return semanaDefault;
+
+  try {
+    const inicio = new Date(semanaInicioFecha + 'T00:00:00');
+    const hoy = new Date();
+    // Normalizar hoy a medianoche local para cálculo preciso de días
+    const hoyMedianoche = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    
+    const diffMs = hoyMedianoche.getTime() - inicio.getTime();
+    if (diffMs < 0) {
+      // Si aún no empieza el semestre, retornamos la semana S1 si existe o la default
+      const primeraSemana = semanasDisponibles.find(s => s.toLowerCase() === 's1') || semanaDefault;
+      return primeraSemana;
+    }
+
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const nSemana = Math.floor(diffDays / 7) + 1;
+    const semanaStr = `S${nSemana}`;
+
+    if (semanasDisponibles.includes(semanaStr)) {
+      return semanaStr;
+    }
+  } catch (error) {
+    console.error('Error calculando la semana actual por fecha:', error);
+  }
+
+  return semanaDefault;
+}
+

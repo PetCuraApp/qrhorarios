@@ -1,5 +1,5 @@
 import { leerHorarios } from '@/lib/storage';
-import { BLOQUES_HORARIOS } from '@/lib/bloques';
+import { BLOQUES_HORARIOS, calcularSemanaActual } from '@/lib/bloques';
 import type { SalaData } from '@/lib/parser';
 import IndexClient from './IndexClient';
 
@@ -27,12 +27,29 @@ export default async function HomePage() {
     );
   }
 
+  // Calcular la semana activa de forma dinámica en base a la fecha real
+  const semanaActiva = calcularSemanaActual(
+    data.semanaInicioFecha,
+    data.semanasDisponibles || [],
+    data.semanaActivaDefault
+  );
+
+  // Mapear cada sala para inyectar el horario correspondiente a la semana activa calculada
+  const salasMapeadas: SalaData[] = data.salas.map((sala) => {
+    const horarioSemana = sala.horariosPorSemana?.[semanaActiva];
+    return {
+      ...sala,
+      horario: horarioSemana || sala.horario,
+    };
+  });
+
   return (
     <IndexClient
-      salas={data.salas}
-      semana={data.semana}
+      salas={salasMapeadas}
+      semana={semanaActiva}
       generado={data.generado}
       totalSalas={data.totalSalas}
     />
   );
 }
+

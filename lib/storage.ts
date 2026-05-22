@@ -86,3 +86,28 @@ export async function guardarExcel(buffer: Buffer, filename: string): Promise<st
   }
   return null;
 }
+
+/** Actualiza los metadatos de configuración sin alterar los horarios */
+export async function actualizarConfig(semanaActivaDefault: string, semanaInicioFecha?: string): Promise<boolean> {
+  const data = await leerHorarios();
+  if (!data) return false;
+
+  data.semanaActivaDefault = semanaActivaDefault;
+  // Soporte de compatibilidad
+  (data as any).semana = semanaActivaDefault;
+  
+  if (semanaInicioFecha !== undefined) {
+    data.semanaInicioFecha = semanaInicioFecha || undefined;
+  }
+  
+  // Actualizar el fallback 'horario' de cada sala para que apunte a la semana activa por defecto elegida
+  for (const sala of data.salas) {
+    if (sala.horariosPorSemana && sala.horariosPorSemana[semanaActivaDefault]) {
+      sala.horario = sala.horariosPorSemana[semanaActivaDefault];
+    }
+  }
+
+  await guardarHorarios(data);
+  return true;
+}
+
