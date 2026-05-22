@@ -103,6 +103,7 @@ async function escribirStats(data: StatsData): Promise<void> {
       access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
+      allowOverwrite: true, // Enable overwriting an existing blob with the same pathname
     });
   } else {
     const dir = path.dirname(LOCAL_STATS_PATH);
