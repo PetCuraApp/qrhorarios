@@ -29,6 +29,7 @@ export async function guardarHorarios(data: HorariosData): Promise<void> {
       access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
+      allowOverwrite: true, // Enable overwriting an existing blob with the same pathname
     });
   } else {
     // Fallback local: solo en desarrollo real
