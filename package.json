@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
     "@types/crypto-js": "^4.2.2",
     "@types/qrcode": "^1.5.6",
     "@vercel/blob": "^2.3.3",
